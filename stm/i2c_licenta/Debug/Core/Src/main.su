@@ -1,0 +1,12 @@
+../Core/Src/main.c:24:5:main	16	static
+../Core/Src/main.c:50:6:I2C_Scan	56	static
+../Core/Src/main.c:61:6:BNO055_Init	40	static
+../Core/Src/main.c:111:6:Read_Accelerometer	56	static
+../Core/Src/main.c:125:6:Read_Gyroscope	56	static
+../Core/Src/main.c:139:6:calibrate_sensor	48	static
+../Core/Src/main.c:154:6:get_info	64	static
+../Core/Src/main.c:166:6:SystemClock_Config	88	static
+../Core/Src/main.c:193:13:MX_USART2_UART_Init	8	static
+../Core/Src/main.c:207:13:MX_I2C1_Init	8	static
+../Core/Src/main.c:222:13:MX_GPIO_Init	24	static
+../Core/Src/main.c:229:6:Error_Handler	4	static,ignoring_inline_asm

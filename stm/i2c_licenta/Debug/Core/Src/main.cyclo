@@ -1,0 +1,12 @@
+../Core/Src/main.c:24:5:main	4
+../Core/Src/main.c:50:6:I2C_Scan	3
+../Core/Src/main.c:61:6:BNO055_Init	6
+../Core/Src/main.c:111:6:Read_Accelerometer	2
+../Core/Src/main.c:125:6:Read_Gyroscope	2
+../Core/Src/main.c:139:6:calibrate_sensor	2
+../Core/Src/main.c:154:6:get_info	1
+../Core/Src/main.c:166:6:SystemClock_Config	3
+../Core/Src/main.c:193:13:MX_USART2_UART_Init	2
+../Core/Src/main.c:207:13:MX_I2C1_Init	2
+../Core/Src/main.c:222:13:MX_GPIO_Init	1
+../Core/Src/main.c:229:6:Error_Handler	1

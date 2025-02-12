@@ -1,0 +1,14 @@
+17:39:00 **** Incremental Build of configuration Debug for project i2c_2_ports_testing ****
+make -j12 all 
+arm-none-eabi-size  i2c_2_ports_testing.elf 
+   text	   data	    bss	    dec	    hex	filename
+  20176	     92	   2140	  22408	   5788	i2c_2_ports_testing.elf
+Finished building: default.size.stdout
+ 
+17:39:02 **** Incremental Build of configuration Debug for project i2c_2_ports_testing ****
+make -j12 all 
+arm-none-eabi-size  i2c_2_ports_testing.elf 
+   text	   data	    bss	    dec	    hex	filename
+  20176	     92	   2140	  22408	   5788	i2c_2_ports_testing.elf
+Finished building: default.size.stdout
+ 

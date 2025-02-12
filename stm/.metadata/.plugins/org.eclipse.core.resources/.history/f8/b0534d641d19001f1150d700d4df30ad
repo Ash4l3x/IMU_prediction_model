@@ -1,0 +1,205 @@
+#include "main.h"
+#include "stm32f4xx_hal.h"
+#include <string.h>
+#include <stdint.h>
+#include <stdio.h>
+#include "adress_defines.h"
+
+I2C_HandleTypeDef hi2c1;
+UART_HandleTypeDef huart2;
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_I2C1_Init(void);
+static void MX_USART2_UART_Init(void);
+void Error_Handler(void);
+
+void BNO055_Init(I2C_HandleTypeDef *hi2c);
+void Read_Accelerometer(I2C_HandleTypeDef *hi2c, uint16_t sensor_address, float *accel_data);
+void Read_Gyroscope(I2C_HandleTypeDef *hi2c, uint16_t sensor_address, float *gyro_data);
+void I2C_Scan(I2C_HandleTypeDef *i2c);
+void calibrate_sensor(I2C_HandleTypeDef *hi2c, uint16_t sensor_address);
+void get_info(I2C_HandleTypeDef *hi2c, uint16_t sensor_address);
+
+int main(void) {
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_I2C1_Init();
+    MX_USART2_UART_Init();
+
+    I2C_Scan(&hi2c1);
+    HAL_Delay(200);
+    BNO055_Init(&hi2c1);
+    HAL_Delay(500);
+
+    while (1) {
+        if (__HAL_UART_GET_FLAG(&huart2, UART_FLAG_RXNE)) {
+            char command;
+            HAL_UART_Receive(&huart2, (uint8_t *)&command, 1, HAL_MAX_DELAY);
+            if (command == '1') {
+                calibrate_sensor(&hi2c1, BNO055_ADDRESS);
+            } else if (command == '2') {
+                get_info(&hi2c1, BNO055_ADDRESS);
+            }
+        }
+        HAL_Delay(100); // Delay to avoid flooding the serial output
+    }
+}
+
+void I2C_Scan(I2C_HandleTypeDef *i2c) {
+    uint8_t address;
+    for (address = 1; address < 128; address++) {
+        if (HAL_I2C_IsDeviceReady(i2c, (address << 1), 1, 10) == HAL_OK) {
+            char msg[32];
+            sprintf(msg, "I2C device found at address: 0x%X\n", address);
+            HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
+        }
+    }
+}
+
+void BNO055_Init(I2C_HandleTypeDef *hi2c) {
+    uint8_t config_data = OPERATION_MODE_CONFIG;
+    HAL_I2C_Mem_Write(hi2c, BNO055_ADDRESS << 1, BNO055_OPR_MODE_ADDR, I2C_MEMADD_SIZE_8BIT, &config_data, 1, 100);
+    HAL_Delay(25);
+
+    uint8_t power_mode = POWER_MODE_NORMAL;
+    HAL_I2C_Mem_Write(hi2c, BNO055_ADDRESS << 1, BNO055_PWR_MODE_ADDR, I2C_MEMADD_SIZE_8BIT, &power_mode, 1, 100);
+    HAL_Delay(10);
+
+    uint8_t sys_trigger = 0x00;
+    HAL_I2C_Mem_Write(hi2c, BNO055_ADDRESS << 1, BNO055_SYS_TRIGGER_ADDR, I2C_MEMADD_SIZE_8BIT, &sys_trigger, 1, 100);
+    HAL_Delay(10);
+
+    uint8_t unit_sel = UNIT_SEL;
+    HAL_I2C_Mem_Write(hi2c, BNO055_ADDRESS << 1, BNO055_UNIT_SEL_ADDR, I2C_MEMADD_SIZE_8BIT, &unit_sel, 1, 100);
+    HAL_Delay(10);
+
+    config_data = OPERATION_MODE_NDOF;
+    HAL_I2C_Mem_Write(hi2c, BNO055_ADDRESS << 1, BNO055_OPR_MODE_ADDR, I2C_MEMADD_SIZE_8BIT, &config_data, 1, 100);
+    HAL_Delay(20);
+}
+
+void Read_Accelerometer(I2C_HandleTypeDef *hi2c, uint16_t sensor_address, float *accel_data) {
+    uint8_t buffer[6];
+    HAL_StatusTypeDef ret;
+
+    ret = HAL_I2C_Mem_Read(hi2c, sensor_address << 1, BNO055_ACCEL_DATA_X_LSB_ADDR, I2C_MEMADD_SIZE_8BIT, buffer, 6, 100);
+    if (ret == HAL_OK) {
+        accel_data[0] = (int16_t)((buffer[1] << 8) | buffer[0]) / 100.0; // X-axis
+        accel_data[1] = (int16_t)((buffer[3] << 8) | buffer[2]) / 100.0; // Y-axis
+        accel_data[2] = (int16_t)((buffer[5] << 8) | buffer[4]) / 100.0; // Z-axis
+    } else {
+        Error_Handler();
+    }
+}
+
+void Read_Gyroscope(I2C_HandleTypeDef *hi2c, uint16_t sensor_address, float *gyro_data) {
+    uint8_t buffer[6];
+    HAL_StatusTypeDef ret;
+
+    ret = HAL_I2C_Mem_Read(hi2c, sensor_address << 1, BNO055_GYRO_DATA_X_LSB_ADDR, I2C_MEMADD_SIZE_8BIT, buffer, 6, 100);
+    if (ret == HAL_OK) {
+        gyro_data[0] = (int16_t)((buffer[1] << 8) | buffer[0]) / 16.0; // X-axis
+        gyro_data[1] = (int16_t)((buffer[3] << 8) | buffer[2]) / 16.0; // Y-axis
+        gyro_data[2] = (int16_t)((buffer[5] << 8) | buffer[4]) / 16.0; // Z-axis
+    } else {
+        Error_Handler();
+    }
+}
+
+void calibrate_sensor(I2C_HandleTypeDef *hi2c, uint16_t sensor_address) {
+    uint8_t calib_data[1];
+    HAL_StatusTypeDef ret;
+
+    // Read the calibration status register (BNO055_CALIB_STAT_ADDR is 0x35)
+    ret = HAL_I2C_Mem_Read(hi2c, sensor_address << 1, 0x35, I2C_MEMADD_SIZE_8BIT, calib_data, 1, 100);
+    if (ret != HAL_OK) {
+        // Handle read error
+        return;
+    }
+
+    HAL_UART_Transmit(&huart2, &calib_data, 1, HAL_MAX_DELAY);
+}
+
+
+void get_info(I2C_HandleTypeDef *hi2c, uint16_t sensor_address) {
+    float accel_data[3];
+    float gyro_data[3];
+
+    Read_Accelerometer(hi2c, sensor_address, accel_data);
+    Read_Gyroscope(hi2c, sensor_address, gyro_data);
+
+    float data[6] = {accel_data[0], accel_data[1], accel_data[2], gyro_data[0], gyro_data[1], gyro_data[2]};
+
+	HAL_UART_Transmit(&huart2, (uint8_t *)data, sizeof(data), HAL_MAX_DELAY);
+}
+
+void SystemClock_Config(void) {
+    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+    __HAL_RCC_PWR_CLK_ENABLE();
+    __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
+
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+    RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+        Error_Handler();
+    }
+
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                                  |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK) {
+        Error_Handler();
+    }
+}
+
+static void MX_USART2_UART_Init(void) {
+    huart2.Instance = USART2;
+    huart2.Init.BaudRate = 115200;
+    huart2.Init.WordLength = UART_WORDLENGTH_8B;
+    huart2.Init.StopBits = UART_STOPBITS_1;
+    huart2.Init.Parity = UART_PARITY_NONE;
+    huart2.Init.Mode = UART_MODE_TX_RX;
+    huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+    if (HAL_UART_Init(&huart2) != HAL_OK) {
+        Error_Handler();
+    }
+}
+
+static void MX_I2C1_Init(void) {
+    hi2c1.Instance = I2C1;
+    hi2c1.Init.ClockSpeed = 400000;
+    hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+    hi2c1.Init.OwnAddress1 = 0;
+    hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+    hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+    hi2c1.Init.OwnAddress2 = 0;
+    hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+    hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+    if (HAL_I2C_Init(&hi2c1) != HAL_OK) {
+        Error_Handler();
+    }
+}
+
+static void MX_GPIO_Init(void) {
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_GPIOH_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+}
+
+void Error_Handler(void) {
+    __disable_irq();
+    while (1) {
+    }
+}

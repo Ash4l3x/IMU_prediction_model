@@ -1,0 +1,10 @@
+18:38:32 **** Incremental Build of configuration Debug for project Licenta ****
+make -j12 all 
+arm-none-eabi-size  Licenta.elf 
+   text	   data	    bss	    dec	    hex	filename
+  15612	    104	   2072	  17788	   457c	Licenta.elf
+Finished building: default.size.stdout
+ 
+
+18:38:32 Build Finished. 0 errors, 0 warnings. (took 190ms)
+
